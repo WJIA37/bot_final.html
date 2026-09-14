@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>北北基通勤避險 Bot</title>
+
+    <!-- 社群／Notion 連結預覽用的 Open Graph 標籤 -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="北北基通勤避險 Bot">
+    <meta property="og:description" content="結合即時路況與氣象風險評分，為北北基通勤族挑選最低風險運具方案的 LINE Bot 靜態簡報。">
+    <meta property="og:image" content="https://wjia37.github.io/bot_final.html/notion_cover.png">
+    <meta property="og:url" content="https://wjia37.github.io/bot_final.html/">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://wjia37.github.io/bot_final.html/notion_cover.png">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Fredoka & Noto Sans TC -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-cream: #FAF6EE;
+            --text-brown: #716053;
+            --route-yellow: #F4B41A;
+            --mrt-green: #88C999;
+            --warm-red: #E76F51;
+            --sky-blue: #70A1D7;
+            --card-cream: #FFFDF9;
+        }
+
+        body {
+            background-color: var(--bg-cream);
+            color: var(--text-brown);
+            font-family: 'Noto Sans TC', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-image: radial-gradient(#716053 1.2px, transparent 1.2px);
+            background-size: 20px 20px;
+        }
+
+        h1, h2, h3, h4, .font-title {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+        }
+
+        /* 厚實邊框與積木貼紙陰影 */
+        .cozy-border {
+            border: 4px solid var(--text-brown);
+        }
+
+        .cozy-shadow {
+            box-shadow: 3px 3px 0px 0px var(--text-brown);
+        }
+
+        .cozy-shadow-lg {
+            box-shadow: 5px 5px 0px 0px var(--text-brown);
+        }
+
+        /* 圓角規則 */
+        .rounded-cozy {
+            border-radius: 24px;
+        }
+
+        /* 靜態簡報頁面容器 */
+        .slide-page {
+            width: 100%;
+            max-width: 1100px;
+            aspect-ratio: 16 / 9;
+            background-color: var(--bg-cream);
+            position: relative;
+            box-sizing: border-box;
+            overflow: hidden;
+            margin: 0 auto 2.5rem auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        /* 手機版（RWD）：取消 16:9 強制鎖定的比例，
+           改成依內容自然撐開高度，避免文字或卡片被裁切造成跑版 */
+        @media (max-width: 768px) {
+            .slide-page {
+                aspect-ratio: auto;
+                overflow: visible;
+                margin-bottom: 1.5rem;
+            }
+        }
+
+        /* 橫向與豎向點綴線條 */
+        .dashed-line {
+            border-top: 3px dashed var(--text-brown);
+        }
+
+        /* 避免長字串（如英文網址、代號）在窄螢幕擠壓版面 */
+        * {
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        /* 簡報列印/瀏覽優化 */
+        @media print {
+            body {
+                background: none;
+            }
+            .slide-page {
+                page-break-after: always;
+                margin: 0;
+                box-shadow: none;
+                aspect-ratio: 16 / 9;
+                overflow: hidden;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="py-6 px-3 sm:px-6 flex flex-col items-center min-h-screen">
+
+    <header class="no-print w-full max-w-[1100px] bg-[#FFFDF9] cozy-border cozy-shadow rounded-2xl px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 mb-6">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl sm:text-3xl">🚌</span>
+            <div>
+                <h1 class="text-base sm:text-lg font-bold text-[#716053] tracking-wide leading-none">北北基通勤避險 Bot</h1>
+                <p class="text-xs font-bold text-[#716053]/70 mt-1">靜態展示簡報 (7 Slides Deck)</p>
+            </div>
+        </div>
+        <div class="flex items-center flex-wrap gap-2">
+            <span class="bg-[#F4B41A] text-[#716053] px-3 py-1 rounded-full cozy-border text-xs font-bold whitespace-nowrap">
+                🎟️ 大眾運輸童趣風格
+            </span>
+            <button onclick="window.print()" class="hidden sm:inline-block bg-[#88C999] text-[#716053] px-3 py-1 rounded-full cozy-border text-xs font-bold hover:bg-[#88C999]/80 cursor-pointer whitespace-nowrap">
+                🖨️ 列印 / 導出 PDF
+            </button>
+        </div>
+    </header>
+
+    <!-- Slide Main Container -->
+    <div class="w-full max-w-[1100px] flex flex-col items-center">
+
+        <!-- ===== SLIDE 1: 封面頁 (首發站/列車車票) ===== -->
+        <section class="slide-page rounded-cozy cozy-border cozy-shadow-lg p-4 sm:p-6 md:p-8">
+            <!-- 上方車票標籤與站點標示 -->
+            <div class="flex flex-wrap justify-between items-center w-full gap-2">
+                <div class="bg-[#88C999] text-[#716053] text-xs font-bold px-4 py-1.5 rounded-full cozy-border flex items-center space-x-1">
+                    <span>🎟️ SPECIAL PASS</span>
+                    <span>•</span>
+                    <span>北北基特急避險列車</span>
+                </div>
+                <div class="bg-[#F4B41A] text-[#716053] text-xs font-bold px-3 py-1.5 rounded-full cozy-border">
+                    STATION 01 / 07
+                </div>
+            </div>
+
+            <!-- 車票主卡片區塊 -->
+            <div class="w-full my-auto bg-[#FFFDF9] cozy-border rounded-2xl p-6 cozy-shadow flex flex-col md:flex-row gap-6 relative overflow-hidden">
+                <!-- 左側內文 -->
+                <div class="flex-1 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-2">
+                            <span class="bg-[#E76F51] text-[#FAF6EE] text-[11px] font-bold px-2.5 py-0.5 rounded-md cozy-border">LINE Bot 智慧導航</span>
+                            <span class="text-xs font-bold text-[#716053]">起點：擁塞日常 ➔ 到達：順暢通關</span>
+                        </div>
+                        <h1 class="text-3xl md:text-4xl font-extrabold text-[#716053] leading-tight">
+                            北北基通勤避險 Bot 🚏
+                        </h1>
+                        <p class="text-sm md:text-base font-medium text-[#716053]/90 mt-2 leading-relaxed">
+                            專為台北、新北、基隆廣大通勤族打造！運用自然語言與語音對話，結合即時道路事故與天氣風險，挑選「最低風險」的運具避險方案。
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2 mt-4">
+                        <span class="bg-[#88C999]/30 text-[#716053] px-2.5 py-1 rounded-lg cozy-border text-xs font-bold whitespace-nowrap">🤖 Gemini 3.5 Flash</span>
+                        <span class="bg-[#F4B41A]/30 text-[#716053] px-2.5 py-1 rounded-lg cozy-border text-xs font-bold whitespace-nowrap">🚌 TDX 運輸大數據</span>
+                        <span class="bg-[#70A1D7]/30 text-[#716053] px-2.5 py-1 rounded-lg cozy-border text-xs font-bold whitespace-nowrap">☁️ CWA 氣象署即時預報</span>
+                        <span class="bg-[#E76F51]/30 text-[#716053] px-2.5 py-1 rounded-lg cozy-border text-xs font-bold whitespace-nowrap">⚡ Redis Fail-Open 降級</span>
+                    </div>
+                </div>
+
+                <!-- 右側車票副聯 (Ticket Stub) -->
+                <div class="w-full md:w-64 bg-[#FAF6EE] cozy-border rounded-xl p-4 flex flex-col justify-between items-center text-center">
+                    <div class="w-full">
+                        <span class="text-[10px] font-bold text-[#716053]/70 uppercase tracking-widest">BOARDING TICKET</span>
+                        <div class="text-3xl my-1">🚆</div>
+                        <div class="bg-[#FFFDF9] cozy-border rounded-lg p-2.5 text-xs text-[#716053] font-bold">
+                            <p>目標：避開極端擁塞</p>
+                            <p class="mt-0.5 text-[#E76F51]">核心：0-100 風險指標</p>
+                        </div>
+                    </div>
+
+                    <!-- 虛構條碼與編號 -->
+                    <div class="w-full mt-3">
+                        <div class="h-8 bg-[#716053] rounded flex justify-between px-2 items-center opacity-85">
+                            <div class="w-1 h-6 bg-[#FAF6EE]"></div>
+                            <div class="w-2 h-6 bg-[#FAF6EE]"></div>
+                            <div class="w-1 h-6 bg-[#FAF6EE]"></div>
+                            <div class="w-3 h-6 bg-[#FAF6EE]"></div>
+                            <div class="w-1 h-6 bg-[#FAF6EE]"></div>
+                            <div class="w-2 h-6 bg-[#FAF6EE]"></div>
+                        </div>
+                        <span class="text-[9px] font-mono font-bold text-[#716053] tracking-widest mt-1 block">TICKET-2026-SAFE-BOT</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底欄資訊 -->
+            <div class="flex justify-between items-center text-xs font-bold text-[#716053] bg-[#FFFDF9] cozy-border rounded-xl px-4 py-2">
+                <span>🛤️ 首發站：台北車站 / 基隆轉運站 / 板橋公車站</span>
+                <span class="text-[#88C999]">● 列車狀態：順暢行駛中</span>
+            </div>
+        </section>
+
+        <!-- ===== SLIDE 2: 路線規劃 / 目錄頁 (Transit Map) ===== -->
+        <section class="slide-page rounded-cozy cozy-border cozy-shadow-lg p-4 sm:p-6 md:p-8">
+            <div class="flex flex-wrap justify-between items-center w-full mb-2 gap-2">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🧭</span>
+                    <h2 class="text-lg sm:text-xl font-bold text-[#716053]">路線規劃 (Transit Map Agenda)</h2>
+                </div>
+                <div class="bg-[#F4B41A] text-[#716053] text-xs font-bold px-3 py-1.5 rounded-full cozy-border">
+                    STATION 02 / 07
+                </div>
+            </div>
+
+            <!-- 4 大簡報重點卡片 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-auto">
+                <!-- 卡片 1 -->
+                <div class="bg-[#FFFDF9] p-4 rounded-cozy cozy-border cozy-shadow flex items-start space-x-3 border-l-8 border-l-[#E76F51]">
+                    <div class="w-10 h-10 rounded-xl bg-[#E76F51] text-[#FAF6EE] font-bold text-lg flex items-center justify-center cozy-border flex-shrink-0">
+                        01
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-bold text-[#E76F51] bg-[#E76F51]/10 px-2 py-0.5 rounded">痛點與理念</span>
+                        <h3 class="text-base font-bold text-[#716053] mt-0.5">傳統地圖 vs 避險 Bot 🚏</h3>
+                        <p class="text-xs text-[#716053]/80 mt-1 leading-relaxed">打破「最快時間」迷思，加入事故、施工與天氣綜合評估，為通勤族尋求低風險路線。</p>
+                    </div>
+                </div>
+
+                <!-- 卡片 2 -->
+                <div class="bg-[#FFFDF9] p-4 rounded-cozy cozy-border cozy-shadow flex items-start space-x-3 border-l-8 border-l-[#70A1D7]">
+                    <div class="w-10 h-10 rounded-xl bg-[#70A1D7] text-[#FAF6EE] font-bold text-lg flex items-center justify-center cozy-border flex-shrink-0">
+                        02
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-bold text-[#70A1D7] bg-[#70A1D7]/10 px-2 py-0.5 rounded">技術車廂</span>
+                        <h3 class="text-base font-bold text-[#716053] mt-0.5">系統架構與 API 串接 🚆</h3>
+                        <p class="text-xs text-[#716053]/80 mt-1 leading-relaxed">Python Flask + GCP Cloud Run、TDX 多運具資料、CWA 氣象與 Redis Fail-Open 降級防護。</p>
+                    </div>
+                </div>
+
+                <!-- 卡片 3 -->
+                <div class="bg-[#FFFDF9] p-4 rounded-cozy cozy-border cozy-shadow flex items-start space-x-3 border-l-8 border-l-[#F4B41A]">
+                    <div class="w-10 h-10 rounded-xl bg-[#F4B41A] text-[#716053] font-bold text-lg flex items-center justify-center cozy-border flex-shrink-0">
+                        03
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-bold text-[#716053] bg-[#F4B41A]/30 px-2 py-0.5 rounded">核心機制</span>
+                        <h3 class="text-base font-bold text-[#716053] mt-0.5">0-100 即時道路風險評分 📊</h3>
+                        <p class="text-xs text-[#716053]/80 mt-1 leading-relaxed">權重計算事件與極端氣象，分數過高自動轉導軌道運輸，並附上可解釋的理由卡片。</p>
+                    </div>
+                </div>
+
+                <!-- 卡片 4 -->
+                <div class="bg-[#FFFDF9] p-4 rounded-cozy cozy-border cozy-shadow flex items-start space-x-3 border-l-8 border-l-[#88C999]">
+                    <div class="w-10 h-10 rounded-xl bg-[#88C999] text-[#716053] font-bold text-lg flex items-center justify-center cozy-border flex-shrink-0">
+                        04
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-bold text-[#716053] bg-[#88C999]/30 px-2 py-0.5 rounded">體驗與藍圖</span>
+                        <h3 class="text-base font-bold text-[#716053] mt-0.5">多輪對話時間軸與未來展望 🌟</h3>
+                        <p class="text-xs text-[#716053]/80 mt-1 leading-relaxed">Gemini 語音多模態解析、Flex Message 展開時間軸與未來 7 大優化方向。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底欄路線圖裝飾 -->
+            <div class="bg-[#FFFDF9] cozy-border rounded-xl p-3 flex items-center justify-between text-xs font-bold text-[#716053]">
+                <span>📍 路線停靠站：對比月台 ➔ 系統車廂 ➔ 風險評分 ➔ 流程與展望</span>
+                <span class="text-[#E76F51]">全程共 4 大亮點站點</span>
+            </div>
+        </section>
+
+        <!-- ===== SLIDE 3: 雙欄月台對比頁 (Platform Comparison) ===== -->
+        <section class="slide-page rounded-cozy cozy-border cozy-shadow-lg p-4 sm:p-6 md:p-8">
+            <div class="flex flex-wrap justify-between items-center w-full mb-2 gap-2">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🚉</span>
+                    <h2 class="text-lg sm:text-xl font-bold text-[#716053]">月台對比：傳統導航 vs 通勤避險 Bot</h2>
+                </div>
+                <div class="bg-[#F4B41A] text-[#716053] text-xs font-bold px-3 py-1.5 rounded-full cozy-border">
+                    STATION 03 / 07
+                </div>
+            </div>
+
+            <!-- 對比雙欄 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 my-auto">
+                <!-- 月台 A: 傳統地圖 App -->
+                <div class="bg-[#FFFDF9] rounded-cozy cozy-border p-4 cozy-shadow relative">
+                    <span class="absolute top-0 right-0 bg-[#716053]/20 text-[#716053] font-bold text-[10px] px-3 py-1 rounded-bl-xl border-b-2 border-l-2 border-[#716053]">
+                        月台 A • 一般地圖導航
+                    </span>
+                    <div class="flex items-center space-x-2 mb-3">
+                        <span class="text-2xl">🐢</span>
+                        <h3 class="text-base font-bold text-[#716053]">傳統運具規劃痛點</h3>
+                    </div>
+                    <ul class="space-y-2.5 text-xs text-[#716053]">
+                        <li class="flex items-start space-x-2 bg-[#FAF6EE] p-2 rounded-xl border border-[#716053]/20">
+                            <span class="font-bold text-[#E76F51]">❌</span>
+                            <div>
+                                <strong class="block">單純比「最短時間」：</strong>
+                                <span class="opacity-80">遇到突發車禍、豪雨積水時，預估抵達時間容易嚴重誤判失真。</span>
+                            </div>
+                        </li>
+                        <li class="flex items-start space-x-2 bg-[#FAF6EE] p-2 rounded-xl border border-[#716053]/20">
+                            <span class="font-bold text-[#E76F51]">❌</span>
+                            <div>
+                                <strong class="block">黑盒子且資訊分散：</strong>
+                                <span class="opacity-80">使用者需要同時切換氣象 App、新聞與公車動態，無法自動整合算風險。</span>
+                            </div>
+                        </li>
+                        <li class="flex items-start space-x-2 bg-[#FAF6EE] p-2 rounded-xl border border-[#716053]/20">
+                            <span class="font-bold text-[#E76F51]">❌</span>
+                            <div>
+                                <strong class="block">死板表單輸入：</strong>
+                                <span class="opacity-80">必須依序選擇起點、終點、出發時間，無法直接用語音或一兩句話講完。</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- 月台 B: 北北基通勤避險 Bot -->
+                <div class="bg-[#FFFDF9] rounded-cozy cozy-border p-4 cozy-shadow relative bg-gradient-to-br from-[#FFFDF9] to-[#88C999]/20">
+                    <span class="absolute top-0 right-0 bg-[#88C999] text-[#716053] font-bold text-[10px] px-3 py-1 rounded-bl-xl border-b-2 border-l-2 border-[#716053]">
+                        月台 B • 避險 Bot (本專案)
+                    </span>
+                    <div class="flex items-center space-x-2 mb-3">
+                        <span class="text-2xl">🚀</span>
+                        <h3 class="text-base font-bold text-[#716053]">智慧風險預判優勢</h3>
+                    </div>
+                    <ul class="space-y-2.5 text-xs text-[#716053]">
+                        <li class="flex items-start space-x-2 bg-[#88C999]/30 p-2 rounded-xl border border-[#88C999]">
+                            <span class="font-bold text-green-700">🟢</span>
+                            <div>
+                                <strong class="block text-[#716053]">風險優先 (Risk-First) 模型：</strong>
+                                <span class="opacity-90">評估路段事故與暴雨，風險高時自動偏好導向軌道運輸（捷運/台鐵）。</span>
+                            </div>
+                        </li>
+                        <li class="flex items-start space-x-2 bg-[#F4B41A]/30 p-2 rounded-xl border border-[#F4B41A]">
+                            <span class="font-bold text-yellow-700">💡</span>
+                            <div>
+                                <strong class="block text-[#716053]">理由透明、看得懂：</strong>
+                                <span class="opacity-90">卡片直接顯示建議理由（如「道路異常與積水，建議改搭板南線」）。</span>
+                            </div>
+                        </li>
+                        <li class="flex items-start space-x-2 bg-[#70A1D7]/30 p-2 rounded-xl border border-[#70A1D7]">
+                            <span class="font-bold text-blue-700">🎙️</span>
+                            <div>
+                                <strong class="block text-[#716053]">自然語言與語音雙輸入：</strong>
+                                <span class="opacity-90">語音或文字隨意講，缺欄位自動溫和追問，不逼使用者一次填完。</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 底欄提示 -->
+            <div class="bg-[#F4B41A]/30 p-2.5 rounded-xl cozy-border text-center text-xs font-bold text-[#716053]">
+                💡 核心差異化賣點：不給假的「最快時間」，而是給予通勤族最踏實的「避險確定性」！
+            </div>
+        </section>
+
+        <!-- ===== SLIDE 4: 多車廂圖卡並排頁 (Tech Architecture) ===== -->
+        <section class="slide-page rounded-cozy cozy-border cozy-shadow-lg p-4 sm:p-6 md:p-8">
+            <div class="flex flex-wrap justify-between items-center w-full mb-2 gap-2">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🚃</span>
+                    <h2 class="text-lg sm:text-xl font-bold text-[#716053]">列車系統車廂：技術規格與架構</h2>
+                </div>
+                <div class="bg-[#F4B41A] text-[#716053] text-xs font-bold px-3 py-1.5 rounded-full cozy-border">
+                    STATION 04 / 07
+                </div>
+            </div>
+
+            <!-- 4 節車廂併排 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 my-auto">
+                <!-- 車廂 1 -->
+                <div class="bg-[#FFFDF9] rounded-cozy cozy-border p-3.5 cozy-shadow flex flex-col justify-between border-t-8 border-t-[#E76F51] min-h-[16rem] md:h-64">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xl">🐍</span>
+                            <span class="bg-[#E76F51] text-[#FAF6EE] text-[9px] font-bold px-2 py-0.5 rounded cozy-border">車廂 01</span>
+                        </div>
+                        <h3 class="font-bold text-sm text-[#716053]">執行與部署</h3>
+                        <p class="text-[11px] font-bold text-[#E76F51]">Python 3.11 + Flask</p>
+                        <div class="my-2 border-t border-dashed border-[#716053]/30"></div>
+                        <ul class="text-[11px] text-[#716053] space-y-1">
+                            <li>• 正式環境：GCP Cloud Run</li>
+                            <li>• 機密託管：GCP Secret Manager (LINE/TDX/CWA 金鑰)</li>
+                        </ul>
+                    </div>
+                    <div class="bg-[#E76F51]/10 p-1.5 rounded-lg text-[10px] font-bold text-[#E76F51] text-center">
+                        無伺服器彈性擴縮
+                    </div>
+                </div>
+
+                <!-- 車廂 2 -->
+                <div class="bg-[#FFFDF9] rounded-cozy cozy-border p-3.5 cozy-shadow flex flex-col justify-between border-t-8 border-t-[#F4B41A] min-h-[16rem] md:h-64">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xl">🌐</span>
+                            <span class="bg-[#F4B41A] text-[#716053] text-[9px] font-bold px-2 py-0.5 rounded cozy-border">車廂 02</span>
+                        </div>
+                        <h3 class="font-bold text-sm text-[#716053]">外部 API 串接</h3>
+                        <p class="text-[11px] font-bold text-[#716053]">TDX + CWA 氣象</p>
+                        <div class="my-2 border-t border-dashed border-[#716053]/30"></div>
+                        <ul class="text-[11px] text-[#716053] space-y-1">
+                            <li>• TDX MaaS 多運具路網</li>
+                            <li>• 公車/台鐵/捷運即時到站</li>
+                            <li>• 即時交通事件與事故</li>
+                            <li>• CWA 氣象預報 API</li>
+                        </ul>
+                    </div>
+                    <div class="bg-[#F4B41A]/30 p-1.5 rounded-lg text-[10px] font-bold text-[#716053] text-center">
+                        即時交通數據總網
+                    </div>
+                </div>
+
+                <!-- 車廂 3 -->
+                <div class="bg-[#FFFDF9] rounded-cozy cozy-border p-3.5 cozy-shadow flex flex-col justify-between border-t-8 border-t-[#70A1D7] min-h-[16rem] md:h-64">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xl">🧠</span>
+                            <span class="bg-[#70A1D7] text-[#FAF6EE] text-[9px] font-bold px-2 py-0.5 rounded cozy-border">車廂 03</span>
+                        </div>
+                        <h3 class="font-bold text-sm text-[#716053]">AI 意圖與 UI</h3>
+                        <p class="text-[11px] font-bold text-[#70A1D7]">Gemini 3.5 + LINE</p>
+                        <div class="my-2 border-t border-dashed border-[#716053]/30"></div>
+                        <ul class="text-[11px] text-[#716053] space-y-1">
+                            <li>• LINE Messaging API v3</li>
+                            <li>• Gemini 語音多模態辨識</li>
+                            <li>• 意圖解析與多輪對話</li>
+                            <li>• Flex Message 雙層卡片</li>
+                        </ul>
+                    </div>
+                    <div class="bg-[#70A1D7]/20 p-1.5 rounded-lg text-[10px] font-bold text-[#716053] text-center">
+                        自然語言與視覺卡片
+                    </div>
+                </div>
+
+                <!-- 車廂 4 -->
+                <div class="bg-[#FFFDF9] rounded-cozy cozy-border p-3.5 cozy-shadow flex flex-col justify-between border-t-8 border-t-[#88C999] min-h-[16rem] md:h-64">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xl">⚡</span>
+                            <span class="bg-[#88C999] text-[#716053] text-[9px] font-bold px-2 py-0.5 rounded cozy-border">車廂 04</span>
+                        </div>
+                        <h3 class="font-bold text-sm text-[#716053]">快取與安全層</h3>
+                        <p class="text-[11px] font-bold text-[#88C999]">Upstash Redis (TLS)</p>
+                        <div class="my-2 border-t border-dashed border-[#716053]/30"></div>
+                        <ul class="text-[11px] text-[#716053] space-y-1">
+                            <li>• 對話狀態與待續行程</li>
+                            <li>• Token 與站牌座標快取</li>
+                            <li>• 🛡️ <b>Fail-Open 設計</b> (safe_get/set 異常容錯降級)</li>
+                        </ul>
+                    </div>
+                    <div class="bg-[#88C999]/30 p-1.5 rounded-lg text-[10px] font-bold text-[#716053] text-center">
+                        0 中斷高可用防護
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底欄裝飾 -->
+            <div class="bg-[#FFFDF9] cozy-border rounded-xl p-2.5 flex justify-around text-xs font-bold text-[#716053]">
+                <span>🔗 雲端運算 (GCP)</span>
+                <span>➔</span>
+                <span>🔗 數據介接 (TDX/CWA)</span>
+                <span>➔</span>
+                <span>🔗 AI 辨識 (Gemini)</span>
+                <span>➔</span>
+                <span>🔗 容錯快取 (Redis)</span>
+            </div>
+        </section>
+
+        <!-- ===== SLIDE 5: 乘車數據圖表頁 (Risk Score & Card) ===== -->
+        <section class="slide-page rounded-cozy cozy-border cozy-shadow-lg p-4 sm:p-6 md:p-8">
+            <div class="flex flex-wrap justify-between items-center w-full mb-2 gap-2">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">📊</span>
+                    <h2 class="text-lg sm:text-xl font-bold text-[#716053]">即時道路風險評分模型 (0-100 Risk Score)</h2>
+                </div>
+                <div class="bg-[#F4B41A] text-[#716053] text-xs font-bold px-3 py-1.5 rounded-full cozy-border">
+                    STATION 05 / 07
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-5 my-auto items-center">
+                <!-- 左側：權重比例圖表 (7 欄) -->
+                <div class="md:col-span-7 bg-[#FFFDF9] rounded-cozy cozy-border p-4 cozy-shadow">
+                    <h3 class="text-sm font-bold text-[#716053] mb-3 flex items-center justify-between">
+                        <span>🚦 風險權重因子組成 (Risk Factors)</span>
+                        <span class="text-[11px] bg-[#F4B41A] px-2 py-0.5 rounded cozy-border font-bold">100% 總權重</span>
+                    </h3>
+
+                    <!-- 長條圖 1 -->
+                    <div class="mb-2.5">
+                        <div class="flex justify-between text-xs font-bold text-[#716053] mb-1">
+                            <span>🚨 即時道路事故與施工 (TDX)</span>
+                            <span>40% 權重</span>
+                        </div>
+                        <div class="w-full h-5 bg-[#FAF6EE] cozy-border rounded-lg overflow-hidden p-0.5">
+                            <div class="h-full bg-[#E76F51] rounded text-[9px] text-[#FAF6EE] font-bold flex items-center justify-end pr-2" style="width: 40%;">
+                                High Impact
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 長條圖 2 -->
+                    <div class="mb-2.5">
+                        <div class="flex justify-between text-xs font-bold text-[#716053] mb-1">
+                            <span>🌧️ 極端氣象因子 (CWA 豪雨/強風/積水)</span>
+                            <span>35% 權重</span>
+                        </div>
+                        <div class="w-full h-5 bg-[#FAF6EE] cozy-border rounded-lg overflow-hidden p-0.5">
+                            <div class="h-full bg-[#70A1D7] rounded text-[9px] text-[#FAF6EE] font-bold flex items-center justify-end pr-2" style="width: 35%;">
+                                Weather Factor
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 長條圖 3 -->
+                    <div class="mb-3">
+                        <div class="flex justify-between text-xs font-bold text-[#716053] mb-1">
+                            <span>📰 新聞路況與台鐵/捷運誤點資訊</span>
+                            <span>25% 權重</span>
+                        </div>
+                        <div class="w-full h-5 bg-[#FAF6EE] cozy-border rounded-lg overflow-hidden p-0.5">
+                            <div class="h-full bg-[#F4B41A] rounded text-[9px] text-[#716053] font-bold flex items-center justify-end pr-2" style="width: 25%;">
+                                Delay Logs
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[#FAF6EE] p-2 rounded-xl border border-[#716053]/30 text-[11px] text-[#716053]">
+                        💡 <b>評分規則：</b> 當風險分數 > 65 分時，系統自動觸發「軌道優先避險機制」，轉導搭乘捷運或台鐵。
+                    </div>
+                </div>
+
+                <!-- 右側：LINE Flex Message 模擬展示卡 (5 欄) -->
+                <div class="md:col-span-5 bg-[#FFFDF9] rounded-cozy cozy-border p-3.5 cozy-shadow flex flex-col justify-between">
+                    <div class="bg-[#E76F51]/10 p-1.5 rounded-lg cozy-border text-center mb-2">
+                        <span class="text-xs font-bold text-[#E76F51]">實例判斷展示 (LINE Flex Message)</span>
+                    </div>
+
+                    <!-- LINE Flex Message 模擬卡片主體 -->
+                    <div class="bg-[#FAF6EE] cozy-border rounded-xl p-3 space-y-2 text-[#716053]">
+                        <!-- 標題與風險係數警示 -->
+                        <div class="border-b border-[#716053]/20 pb-2">
+                            <h4 class="font-extrabold text-base text-[#716053]">目前位置 ➔ 台北車站</h4>
+                            <p class="text-[11px] font-bold text-[#E76F51] mt-0.5">預計 09:00 前抵達 · 總行程 67 分鐘</p>
+                            <p class="text-[9.5px] text-[#E76F51] font-medium leading-snug mt-1 bg-[#E76F51]/10 p-1.5 rounded-md border border-[#E76F51]/30">
+                                道路風險 72/100 · 道路異常，優先軌道避險 · 道路風險分數 72/100，此方案的道路風險成本為 53.3 分鐘。
+                            </p>
+                        </div>
+
+                        <!-- 行程站點與時間軸細節 -->
+                        <div class="space-y-1.5 text-[10px]">
+                            <!-- 起點與公車段 -->
+                            <div class="flex items-start space-x-1.5">
+                                <span class="font-bold text-[#70A1D7] text-[11px] w-9 flex-shrink-0">08:32</span>
+                                <div class="flex-1">
+                                    <p class="font-bold text-[#716053]">○ 出發點：目前位置</p>
+                                    <div class="bg-[#FFFDF9] p-1.5 rounded-lg border border-[#716053]/20 mt-1 space-y-0.5">
+                                        <div class="flex items-center space-x-1 font-bold text-[#70A1D7]">
+                                            <span>🚌</span>
+                                            <span>公車前往七堵 約37分</span>
+                                        </div>
+                                        <p class="text-[8.5px] text-[#716053]/80 leading-tight">
+                                            從「中和路三巷」站搭乘，目前經過路線：目前查無即時經過路線，請自行至站牌確認；車程時間為距離推估，僅供參考，請自行確認實際路線與班次
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 台鐵段 -->
+                            <div class="flex items-center space-x-1.5 pt-0.5">
+                                <span class="font-bold text-[#E76F51] text-[10px] w-9 flex-shrink-0 flex items-center">
+                                    <span>⚡ 30分</span>
+                                </span>
+                                <div class="flex-1 bg-[#FFFDF9] px-2 py-1 rounded-lg border border-[#716053]/20 flex justify-between items-center">
+                                    <span class="font-bold text-[#716053]">🚆 台鐵 七堵-新左營</span>
+                                    <span class="text-[9px] text-[#716053]/70 font-bold">七堵 ➔ 臺北</span>
+                                </div>
+                            </div>
+
+                            <!-- 步行段 -->
+                            <div class="flex items-center space-x-1.5">
+                                <span class="font-bold text-[#716053]/60 text-[9px] w-9 flex-shrink-0">🏃 0分</span>
+                                <span class="text-[9.5px] text-[#716053]/80 font-medium">步行 0分</span>
+                            </div>
+
+                            <!-- 抵達終點 -->
+                            <div class="flex items-center space-x-1.5 pt-1 border-t border-dashed border-[#716053]/20">
+                                <span class="font-bold text-[#88C999] text-[11px] w-9 flex-shrink-0">09:40</span>
+                                <p class="font-bold text-green-700 bg-[#88C999]/30 px-2 py-0.5 rounded-md text-[10.5px]">
+                                    🏁 安全抵達【台北車站】，不遲到！
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-1.5 text-center">
+                        <span class="text-[10px] text-[#716053] font-bold bg-[#88C999]/30 px-2.5 py-0.5 rounded-full border border-[#88C999]">
+                            ✅ 理由透明可解釋，建立信任感
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底欄提示 -->
+            <div class="bg-[#FFFDF9] cozy-border rounded-xl p-2 text-center text-xs font-bold text-[#716053]">
+                🛡️ 配合 Upstash Redis (safe_get/safe_set) 設計，即使外部 API 延遲，亦能於 0.8 秒內完成預備路線推薦。
+            </div>
+        </section>
+
+        <!-- ===== SLIDE 6: 列車行駛時間軸頁 (Process Timeline) ===== -->
+        <section class="slide-page rounded-cozy cozy-border cozy-shadow-lg p-4 sm:p-6 md:p-8">
+            <div class="flex flex-wrap justify-between items-center w-full mb-2 gap-2">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🛤️</span>
+                    <h2 class="text-lg sm:text-xl font-bold text-[#716053]">核心互動流程：車站沿線時間軸</h2>
+                </div>
+                <div class="bg-[#F4B41A] text-[#716053] text-xs font-bold px-3 py-1.5 rounded-full cozy-border">
+                    STATION 06 / 07
+                </div>
+            </div>
+
+            <!-- 5 個站點時間軸 -->
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-2.5 my-auto">
+                <!-- 站點 1 -->
+                <div class="bg-[#FFFDF9] p-3 rounded-cozy cozy-border cozy-shadow flex flex-col justify-between min-h-[14rem] md:h-56">
+                    <div class="flex justify-between items-center">
+                        <span class="w-6 h-6 rounded-full bg-[#E76F51] text-[#FAF6EE] font-bold text-xs flex items-center justify-center cozy-border">1</span>
+                        <span class="text-lg">🎙️</span>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-xs text-[#716053]">多管道行程輸入</h3>
+                        <p class="text-[10px] text-[#716053]/80 mt-1 leading-normal">支援文字訊息或直接傳送錄音檔至 LINE 聊天室。</p>
+                    </div>
+                    <div class="bg-[#E76F51]/10 p-1 rounded text-[9px] font-bold text-[#E76F51] text-center">
+                        語音/文字自由輸入
+                    </div>
+                </div>
+
+                <!-- 站點 2 -->
+                <div class="bg-[#FFFDF9] p-3 rounded-cozy cozy-border cozy-shadow flex flex-col justify-between min-h-[14rem] md:h-56">
+                    <div class="flex justify-between items-center">
+                        <span class="w-6 h-6 rounded-full bg-[#70A1D7] text-[#FAF6EE] font-bold text-xs flex items-center justify-center cozy-border">2</span>
+                        <span class="text-lg">🤖</span>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-xs text-[#716053]">Gemini 多輪對話</h3>
+                        <p class="text-[10px] text-[#716053]/80 mt-1 leading-normal">多模態解析行程。若缺少欄位，自動發出溫和追問。</p>
+                    </div>
+                    <div class="bg-[#70A1D7]/20 p-1 rounded text-[9px] font-bold text-[#716053] text-center">
+                        自動補全記憶
+                    </div>
+                </div>
+
+                <!-- 站點 3 -->
+                <div class="bg-[#FFFDF9] p-3 rounded-cozy cozy-border cozy-shadow flex flex-col justify-between min-h-[14rem] md:h-56">
+                    <div class="flex justify-between items-center">
+                        <span class="w-6 h-6 rounded-full bg-[#F4B41A] text-[#716053] font-bold text-xs flex items-center justify-center cozy-border">3</span>
+                        <span class="text-lg">📍</span>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-xs text-[#716053]">位置分享接續</h3>
+                        <p class="text-[10px] text-[#716053]/80 mt-1 leading-normal">分享位置後，自動接續前述暫存行程，免重複打字。</p>
+                    </div>
+                    <div class="bg-[#F4B41A]/30 p-1 rounded text-[9px] font-bold text-[#716053] text-center">
+                        無縫接續行程
+                    </div>
+                </div>
+
+                <!-- 站點 4 -->
+                <div class="bg-[#FFFDF9] p-3 rounded-cozy cozy-border cozy-shadow flex flex-col justify-between min-h-[14rem] md:h-56">
+                    <div class="flex justify-between items-center">
+                        <span class="w-6 h-6 rounded-full bg-[#88C999] text-[#716053] font-bold text-xs flex items-center justify-center cozy-border">4</span>
+                        <span class="text-lg">⚡</span>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-xs text-[#716053]">TDX 與風險計算</h3>
+                        <p class="text-[10px] text-[#716053]/80 mt-1 leading-normal">即時抓取公車 ETA、路況事件與氣象，計算最低風險路線。</p>
+                    </div>
+                    <div class="bg-[#88C999]/30 p-1 rounded text-[9px] font-bold text-[#716053] text-center">
+                        低風險優先
+                    </div>
+                </div>
+
+                <!-- 站點 5 -->
+                <div class="bg-[#FFFDF9] p-3 rounded-cozy cozy-border cozy-shadow flex flex-col justify-between min-h-[14rem] md:h-56">
+                    <div class="flex justify-between items-center">
+                        <span class="w-6 h-6 rounded-full bg-[#E76F51] text-[#FAF6EE] font-bold text-xs flex items-center justify-center cozy-border">5</span>
+                        <span class="text-lg">🎟️</span>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-xs text-[#716053]">Flex Message 卡片</h3>
+                        <p class="text-[10px] text-[#716053]/80 mt-1 leading-normal">先發送摘要卡，點擊可展開全時間軸導引與完整理由。</p>
+                    </div>
+                    <div class="bg-[#E76F51]/20 p-1 rounded text-[9px] font-bold text-[#716053] text-center">
+                        分層展開卡片
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底欄提示 -->
+            <div class="bg-[#FFFDF9] cozy-border rounded-xl p-2.5 text-center text-xs font-bold text-[#716053]">
+                🔄 全流程無需填寫繁瑣表單，就像跟朋友聊天一樣自然隨性！
+            </div>
+        </section>
+
+        <!-- ===== SLIDE 7: 終點站 / 未來期許與 Q&A (Terminal) ===== -->
+        <section class="slide-page rounded-cozy cozy-border cozy-shadow-lg p-4 sm:p-6 md:p-8">
+            <div class="flex flex-wrap justify-between items-center w-full mb-2 gap-2">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🏁</span>
+                    <h2 class="text-lg sm:text-xl font-bold text-[#716053]">終點站：未來期許與升級藍圖 (Roadmap)</h2>
+                </div>
+                <div class="bg-[#F4B41A] text-[#716053] text-xs font-bold px-3 py-1.5 rounded-full cozy-border">
+                    STATION 07 / 07
+                </div>
+            </div>
+
+            <!-- 7 大未來期許卡片網格 -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 my-auto">
+                <div class="bg-[#FFFDF9] p-2.5 rounded-cozy cozy-border cozy-shadow">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-base">🧠</span>
+                        <h3 class="font-bold text-xs text-[#716053]">1. 常用地點記憶</h3>
+                    </div>
+                    <p class="text-[10px] text-[#716053]/80 mt-1">記憶家與公司等歷史行程，快速一鍵觸發。</p>
+                </div>
+
+                <div class="bg-[#FFFDF9] p-2.5 rounded-cozy cozy-border cozy-shadow">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-base">🔔</span>
+                        <h3 class="font-bold text-xs text-[#716053]">2. 主動風險推播</h3>
+                    </div>
+                    <p class="text-[10px] text-[#716053]/80 mt-1">出門前半小時自動預偵測路況並發送警報。</p>
+                </div>
+
+                <div class="bg-[#FFFDF9] p-2.5 rounded-cozy cozy-border cozy-shadow">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-base">👍</span>
+                        <h3 class="font-bold text-xs text-[#716053]">3. 準確度回饋機制</h3>
+                    </div>
+                    <p class="text-[10px] text-[#716053]/80 mt-1">使用者可回報實際擁塞狀況，強化模型優化。</p>
+                </div>
+
+                <div class="bg-[#FFFDF9] p-2.5 rounded-cozy cozy-border cozy-shadow">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-base">📈</span>
+                        <h3 class="font-bold text-xs text-[#716053]">4. 可解釋視覺化</h3>
+                    </div>
+                    <p class="text-[10px] text-[#716053]/80 mt-1">手繪圖表標示事故地點與氣象特報區塊。</p>
+                </div>
+
+                <div class="bg-[#FFFDF9] p-2.5 rounded-cozy cozy-border cozy-shadow">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-base">📱</span>
+                        <h3 class="font-bold text-xs text-[#716053]">5. LIFF 網頁儀表板</h3>
+                    </div>
+                    <p class="text-[10px] text-[#716053]/80 mt-1">提供輕量網頁介面，方便即時拉選地圖。</p>
+                </div>
+
+                <div class="bg-[#FFFDF9] p-2.5 rounded-cozy cozy-border cozy-shadow">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-base">🌍</span>
+                        <h3 class="font-bold text-xs text-[#716053]">6. 多語言國際支援</h3>
+                    </div>
+                    <p class="text-[10px] text-[#716053]/80 mt-1">服務來台觀光客與外籍通勤人士。</p>
+                </div>
+
+                <div class="bg-[#FFFDF9] p-2.5 rounded-cozy cozy-border cozy-shadow md:col-span-2 bg-[#F4B41A]/20 border-2 border-[#F4B41A]">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-base">🛠️</span>
+                        <h3 class="font-bold text-xs text-[#716053]">7. 維運監控儀表板</h3>
+                    </div>
+                    <p class="text-[10px] text-[#716053]/90 mt-1">後台獨立追蹤 Cloud Run 效能與 API 額度。</p>
+                </div>
+            </div>
+
+            <!-- Q&A 結尾卡片 -->
+            <div class="w-full bg-[#FFFDF9] cozy-border rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between cozy-shadow">
+                <div class="flex items-center space-x-3 mb-2 sm:mb-0">
+                    <span class="text-3xl">🎟️</span>
+                    <div>
+                        <h3 class="text-base font-bold text-[#716053]">感謝搭乘！Q & A 交流時間</h3>
+                        <p class="text-xs text-[#716053]/80">北北基通勤避險 Bot • 讓每次回家與上班都安心順暢</p>
+                    </div>
+                </div>
+
+                <div class="flex space-x-2">
+                    <span class="px-4 py-2 bg-[#88C999] text-[#716053] font-bold rounded-xl cozy-border text-xs flex items-center">
+                        ✨ Safe Commute!
+                    </span>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+</body>
+</html>
